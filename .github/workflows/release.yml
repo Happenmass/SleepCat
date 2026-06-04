@@ -1,0 +1,41 @@
+name: Release DMG
+
+# 推送形如 v1.0.0 的 tag 时触发
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}   # 也允许手动触发（仅构建，便于调试）
+
+permissions:
+  contents: write          # 创建 Release 需要写权限
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Swift 版本
+        run: swift --version
+
+      - name: 打包 .app 并封装 DMG
+        run: |
+          chmod +x package.sh make_dmg.sh
+          ./make_dmg.sh
+
+      - name: 上传构建产物（每次都留存）
+        uses: actions/upload-artifact@v4
+        with:
+          name: SleepCat-dmg
+          path: SleepCat.dmg
+
+      - name: 发布到 Releases（仅 tag 触发时）
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" SleepCat.dmg \
+            --title "SleepCat ${GITHUB_REF_NAME}" \
+            --generate-notes
