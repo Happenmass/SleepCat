@@ -8,6 +8,10 @@ let package = Package(
         .executableTarget(
             name: "SleepCat",
             path: "Sources/SleepCat",
+            resources: [
+                .copy("Resources/睁眼.png"),
+                .copy("Resources/睡觉.png"),
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("IOKit"),

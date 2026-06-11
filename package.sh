@@ -11,6 +11,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp .build/release/SleepCat "$APP/Contents/MacOS/SleepCat"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# SwiftPM 资源包（菜单栏猫猫 PNG），Bundle.module 在 Contents/Resources 下查找
+cp -R .build/release/SleepCat_SleepCat.bundle "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

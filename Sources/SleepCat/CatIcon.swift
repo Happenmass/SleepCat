@@ -1,77 +1,129 @@
 import AppKit
 
-/// 用矢量路径现画一只猫脸做菜单栏图标。
-/// 设为 template image：系统自动按菜单栏前景色着色，深色/浅色模式与 Retina 都清晰。
+/// 菜单栏小猫图标:直接使用 Resources 里手绘的两张 PNG(睁眼.png / 睡觉.png)。
+///
+/// 原图是「黑色线稿 + 棋盘格假透明背景」的 RGB 图,不能直接当菜单栏图标用,
+/// 加载时做一次转换:亮色像素(背景/棋盘格)→ 透明,深色线条 → 纯黑,
+/// 再裁掉四周空白缩放进固定画布。成品设为 template image,
+/// 系统自动按菜单栏前景色着色,深色/浅色模式与 Retina 都清晰。
 enum CatIcon {
 
-    /// - Parameter awake: true = 精神饱满（圆眼睛，18pt 宽）；
-    ///   false = 打盹（闭眼弧线 + 右上 zzz，24pt 宽以容纳 zzz）。
+    /// 两种状态同尺寸画布,切换时菜单栏图标不会跳动。
     static func image(awake: Bool) -> NSImage {
-        let width: CGFloat = awake ? 18 : 24
-        let image = NSImage(size: NSSize(width: width, height: 18), flipped: false) { _ in
+        awake ? awakeImage : asleepImage
+    }
 
-            // 1) 实心猫头（头 + 两只耳朵），nonZero 取并集。
-            let body = NSBezierPath()
-            body.appendOval(in: NSRect(x: 3.2, y: 1.4, width: 11.6, height: 11.6))
-            body.move(to: NSPoint(x: 4.6, y: 10.8)); body.line(to: NSPoint(x: 2.6, y: 16.4)); body.line(to: NSPoint(x: 8.4, y: 12.4)); body.close()
-            body.move(to: NSPoint(x: 13.4, y: 10.8)); body.line(to: NSPoint(x: 15.4, y: 16.4)); body.line(to: NSPoint(x: 9.6, y: 12.4)); body.close()
-            NSColor.black.setFill()
-            body.fill()
+    private static let awakeImage  = load("睁眼")
+    private static let asleepImage = load("睡觉")
 
-            // 2) 五官挖空（destinationOut：擦像素 → 透出菜单栏底色）。
-            NSGraphicsContext.current?.compositingOperation = .destinationOut
-            NSColor.black.setFill()
-            NSColor.black.setStroke()
-            if awake {
-                let eyes = NSBezierPath()
-                eyes.appendOval(in: NSRect(x: 6.0, y: 6.6, width: 2.0, height: 2.0))   // 圆眼
-                eyes.appendOval(in: NSRect(x: 10.0, y: 6.6, width: 2.0, height: 2.0))
-                eyes.fill()
-            } else {
-                // 闭眼：两条向下的弧线（睡着的「‿ ‿」），加粗更清晰。
-                let lids = NSBezierPath()
-                lids.lineWidth = 1.1
-                lids.lineCapStyle = .round
-                lids.appendArc(withCenter: NSPoint(x: 6.9, y: 8.5), radius: 1.4, startAngle: 200, endAngle: 340)
-                lids.appendArc(withCenter: NSPoint(x: 11.1, y: 8.5), radius: 1.4, startAngle: 200, endAngle: 340)
-                lids.stroke()
-            }
-            // 鼻子（小三角，两种状态都有）
-            let nose = NSBezierPath()
-            nose.move(to: NSPoint(x: 8.3, y: 5.7)); nose.line(to: NSPoint(x: 9.7, y: 5.7)); nose.line(to: NSPoint(x: 9.0, y: 4.8)); nose.close()
-            nose.fill()
-            NSGraphicsContext.current?.compositingOperation = .sourceOver
+    private static func load(_ name: String) -> NSImage {
+        guard let url = resourceURL(name),
+              let glyph = makeTemplate(from: url) else {
+            assertionFailure("找不到或无法转换图标资源 \(name).png")
+            let empty = NSImage(size: NSSize(width: 18, height: 18))
+            empty.isTemplate = true
+            return empty
+        }
+        return compose(glyph)
+    }
 
-            // 3) 胡须
-            let whiskers = NSBezierPath()
-            whiskers.lineWidth = 0.7
-            whiskers.lineCapStyle = .round
-            whiskers.move(to: NSPoint(x: 4.8, y: 6.1)); whiskers.line(to: NSPoint(x: 0.9, y: 6.8))
-            whiskers.move(to: NSPoint(x: 4.8, y: 5.1)); whiskers.line(to: NSPoint(x: 0.9, y: 4.6))
-            whiskers.move(to: NSPoint(x: 13.2, y: 6.1)); whiskers.line(to: NSPoint(x: 17.1, y: 6.8))
-            whiskers.move(to: NSPoint(x: 13.2, y: 5.1)); whiskers.line(to: NSPoint(x: 17.1, y: 4.6))
-            NSColor.black.setStroke()
-            whiskers.stroke()
+    private static func resourceURL(_ name: String) -> URL? {
+        #if SWIFT_PACKAGE
+        if let url = Bundle.module.url(forResource: name, withExtension: "png") {
+            return url
+        }
+        #endif
+        // 兜底:从仓库根目录直接跑(开发期)时按源码路径找。
+        let candidate = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/SleepCat/Resources/\(name).png")
+        return FileManager.default.fileExists(atPath: candidate.path) ? candidate : nil
+    }
 
-            // 4) 睡觉时右上角的 zzz —— 渐大、向上飘。
-            if !awake {
-                let z = NSBezierPath()
-                z.lineWidth = 0.9
-                z.lineJoinStyle = .round
-                z.lineCapStyle = .round
-                func addZ(_ ox: CGFloat, _ oy: CGFloat, _ s: CGFloat) {
-                    z.move(to: NSPoint(x: ox, y: oy + s))        // 顶横
-                    z.line(to: NSPoint(x: ox + s, y: oy + s))
-                    z.line(to: NSPoint(x: ox, y: oy))            // 斜线
-                    z.line(to: NSPoint(x: ox + s, y: oy))        // 底横
+    /// 把「黑线稿 + 浅色背景」的位图转成黑色 + 透明的 template 字形:
+    /// 缩到工作分辨率 → 亮度转 alpha → 线稿加粗(膨胀)→ 裁掉四周空白。
+    /// 原图线条相对画幅很细,直接缩到 18pt 会虚成灰色,必须加粗才经得起缩小。
+    static func makeTemplate(from url: URL) -> NSImage? {
+        guard let src = NSImage(contentsOf: url),
+              let cg = src.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+
+        // 1) 等比缩到 ≤512 的工作分辨率,后续逐像素处理在这层做,又快又够清晰。
+        let scale = min(1, 512.0 / CGFloat(max(cg.width, cg.height)))
+        let w = max(1, Int(CGFloat(cg.width) * scale))
+        let h = max(1, Int(CGFloat(cg.height) * scale))
+        guard let ctx = CGContext(data: nil, width: w, height: h,
+                                  bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        guard let data = ctx.data else { return nil }
+        let px = data.assumingMemoryBound(to: UInt8.self)
+
+        // 2) 亮度 → 不透明度:≤0.45 全黑不透明,≥0.72 全透明,中间线性过渡。
+        //    棋盘格假透明(白 / 亮灰)整体落在透明区,线条的抗锯齿边缘得到平滑 alpha。
+        var alpha = [UInt8](repeating: 0, count: w * h)
+        for i in 0..<(w * h) {
+            let lum = (0.299 * CGFloat(px[i * 4]) + 0.587 * CGFloat(px[i * 4 + 1])
+                       + 0.114 * CGFloat(px[i * 4 + 2])) / 255
+            alpha[i] = UInt8(min(max((0.72 - lum) / (0.72 - 0.45), 0), 1) * 255)
+        }
+
+        // 3) 线稿加粗:横向 + 纵向各做一次滑动取最大(盒式膨胀)。
+        let r = max(1, w * 10 / 1000)
+        for pass in 0..<2 {
+            var out = alpha
+            for y in 0..<h {
+                for x in 0..<w {
+                    var m: UInt8 = 0
+                    for d in -r...r {
+                        let xx = pass == 0 ? x + d : x
+                        let yy = pass == 0 ? y : y + d
+                        if xx >= 0, xx < w, yy >= 0, yy < h {
+                            m = max(m, alpha[yy * w + xx])
+                        }
+                    }
+                    out[y * w + x] = m
                 }
-                addZ(15.3, 8.2, 1.7)
-                addZ(17.5, 10.9, 2.2)
-                addZ(20.0, 13.9, 2.7)
-                NSColor.black.setStroke()
-                z.stroke()
             }
+            alpha = out
+        }
 
+        // 4) 写回(预乘黑:RGB 置 0 即可)并统计内容包围盒。
+        var minX = w, minY = h, maxX = -1, maxY = -1
+        for y in 0..<h {
+            for x in 0..<w {
+                let i = y * w + x
+                px[i * 4] = 0; px[i * 4 + 1] = 0; px[i * 4 + 2] = 0
+                px[i * 4 + 3] = alpha[i]
+                if alpha[i] > 20 {
+                    if x < minX { minX = x }; if x > maxX { maxX = x }
+                    if y < minY { minY = y }; if y > maxY { maxY = y }
+                }
+            }
+        }
+        guard maxX >= minX, maxY >= minY, let whole = ctx.makeImage() else { return nil }
+
+        let pad = max(w, h) / 100                              // 1% 呼吸边
+        let x0 = max(0, minX - pad), y0 = max(0, minY - pad)
+        let crop = CGRect(x: x0, y: y0,
+                          width: min(w, maxX + pad + 1) - x0,
+                          height: min(h, maxY + pad + 1) - y0)
+        guard let cropped = whole.cropping(to: crop) else { return nil }
+        return NSImage(cgImage: cropped, size: .zero)
+    }
+
+    /// 把字形按比例缩放、居中放进固定大小的菜单栏画布。
+    static func compose(_ glyph: NSImage, canvas: NSSize = NSSize(width: 21, height: 18)) -> NSImage {
+        let image = NSImage(size: canvas, flipped: false) { rect in
+            let gs = glyph.size
+            guard gs.width > 0, gs.height > 0 else { return true }
+            let scale = min(rect.width / gs.width, rect.height / gs.height)
+            let size = NSSize(width: gs.width * scale, height: gs.height * scale)
+            NSGraphicsContext.current?.imageInterpolation = .high
+            glyph.draw(in: NSRect(x: rect.midX - size.width / 2,
+                                  y: rect.midY - size.height / 2,
+                                  width: size.width, height: size.height))
             return true
         }
         image.isTemplate = true
