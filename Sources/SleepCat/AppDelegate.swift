@@ -10,12 +10,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 每秒刷新一次菜单栏文案（倒计时）。
     private var ticker: Timer?
 
-    // 限时档位（标题 → 秒数）。一只猫的小憩哲学。
-    private let durations: [(title: String, seconds: TimeInterval)] = [
-        ("打个盹 · 15 分钟", 15 * 60),
-        ("晒会儿太阳 · 30 分钟", 30 * 60),
-        ("守一集剧 · 1 小时", 60 * 60),
-        ("陪你加班 · 2 小时", 2 * 60 * 60),
+    // 限时档位（标题 → 表情 → 秒数）。一只猫的小憩哲学。
+    private let durations: [(title: String, emoji: String, seconds: TimeInterval)] = [
+        ("打个盹 · 15 分钟", "☕️", 15 * 60),
+        ("晒会儿太阳 · 30 分钟", "🌞", 30 * 60),
+        ("守一集剧 · 1 小时", "📺", 60 * 60),
+        ("陪你加班 · 2 小时", "💻", 2 * 60 * 60),
     ]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -117,29 +117,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 状态标题（不可点）
         let header = NSMenuItem(
-            title: guard_.isActive ? "🐱 猫咪精神饱满" : "😴 猫咪正在打盹",
+            title: guard_.isActive ? "猫咪精神饱满" : "猫咪正在打盹",
             action: nil, keyEquivalent: ""
         )
+        header.image = Self.emojiIcon(guard_.isActive ? "🐱" : "😴")
         header.isEnabled = false
         menu.addItem(header)
         menu.addItem(.separator())
 
         // 一直清醒 / 放它去睡
         let toggle = NSMenuItem(
-            title: guard_.isActive ? "放它去睡 💤" : "一直陪我清醒 ☕️",
+            title: guard_.isActive ? "放它去睡" : "一直陪我清醒",
             action: #selector(toggleForever), keyEquivalent: ""
         )
         toggle.target = self
+        toggle.image = Self.emojiIcon(guard_.isActive ? "💤" : "☕️")
         if guard_.isActive && deadline == nil { toggle.state = .on }
         menu.addItem(toggle)
 
         // 限时守护子菜单
         let timed = NSMenuItem(title: "限时守护", action: nil, keyEquivalent: "")
+        timed.image = Self.emojiIcon("⏰")
         let sub = NSMenu()
         for (i, d) in durations.enumerated() {
             let item = NSMenuItem(title: d.title, action: #selector(startTimed(_:)), keyEquivalent: "")
             item.target = self
             item.tag = i
+            item.image = Self.emojiIcon(d.emoji)
             sub.addItem(item)
         }
         timed.submenu = sub
@@ -152,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             title: "同时不让屏幕熄灭", action: #selector(toggleDisplaySleep(_:)), keyEquivalent: ""
         )
         display.target = self
+        display.image = Self.emojiIcon("🖥️")
         display.state = guard_.preventDisplaySleep ? .on : .off
         menu.addItem(display)
 
@@ -162,5 +167,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
 
         statusItem.menu = menu
+    }
+
+    /// 把一个 emoji 渲染成菜单项左侧的小图标（彩色，非 template，
+    /// 这样系统不会把它按前景色重新着色，可爱表情得以保留原色）。
+    /// 统一画进正方形画布并居中，各项图标基线对齐、不会高低参差。
+    private static func emojiIcon(_ emoji: String, side: CGFloat = 16) -> NSImage {
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: side * 0.85)]
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            let str = emoji as NSString
+            let textSize = str.size(withAttributes: attrs)
+            str.draw(at: NSPoint(x: rect.midX - textSize.width / 2,
+                                 y: rect.midY - textSize.height / 2),
+                     withAttributes: attrs)
+            return true
+        }
+        image.isTemplate = false
+        return image
     }
 }
